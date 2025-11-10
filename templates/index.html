@@ -1,0 +1,59 @@
+﻿<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <title>Chat с LM Studio</title>
+  <style>
+    body {font-family: Arial, sans-serif; margin: 20px;}
+    #chatbox {border:1px solid #ccc; padding:10px; height:300px; overflow-y:auto;}
+    .msg {margin-bottom:10px;}
+    .user {color:#0066cc;}
+    .assistant {color:#009900;}
+  </style>
+</head>
+<body>
+<h2>Chat с LM Studio</h2>
+
+<div id="chatbox"></div>
+
+<input type="text" id="input" placeholder="Введите сообщение…" style="width:80%;">
+<button onclick="send()">Отправить</button>
+
+<script>
+const chatBox = document.getElementById('chatbox');
+
+function appendMsg(role, text) {
+  const div = document.createElement('div');
+  div.className = 'msg';
+  div.innerHTML = `<strong class="${role}">${role}:</strong> ${text}`;
+  chatBox.appendChild(div);
+  chatBox.scrollTop = chatBox.scrollHeight;
+}
+
+async function send() {
+  const input = document.getElementById('input');
+  const msg = input.value.trim();
+  if (!msg) return;
+
+  appendMsg('User', msg);
+  input.value = '';
+
+  try {
+    const res = await fetch('/chat', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({message: msg})
+    });
+    const data = await res.json();
+    if (res.ok) {
+      appendMsg('Assistant', data.reply);
+    } else {
+      appendMsg('Error', data.error || 'Неизвестная ошибка');
+    }
+  } catch (e) {
+    appendMsg('Error', e.message);
+  }
+}
+</script>
+</body>
+</html>
