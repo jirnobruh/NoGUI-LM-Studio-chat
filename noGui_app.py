@@ -1,13 +1,12 @@
 ﻿#!/usr/bin/env python3
-import sys, json, requests, os
-from config import ServerIp, Port
+import requests, os
+from config import ServerIp, Port, Model, API_KEY
 
 LM_URL = f"http://{ServerIp}:{Port}/v1/chat/completions"
-API_KEY = os.getenv("LM_API_KEY")
 
 def ask(message):
     payload = {
-        "model": "openai/gpt-oss-20b",
+        "model": Model,
         "messages": [{"role": "user", "content": message}],
         "temperature": 0.7,
         "max_tokens": 4096
@@ -20,7 +19,7 @@ def ask(message):
     return r.json()["choices"][0]["message"]["content"]
 
 def main():
-    print("Введите сообщение (Ctrl+C для выхода):")
+    print("Enter the message (Ctrl+C to exit):")
     try:
         while True:
             msg = input("> ")
@@ -28,7 +27,7 @@ def main():
             reply = ask(msg)
             print(f"Assistant: {reply}")
     except KeyboardInterrupt:
-        print("\nВыход")
+        print("\nExit")
 
 if __name__ == "__main__":
     main()
