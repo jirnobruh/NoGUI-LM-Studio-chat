@@ -12,15 +12,41 @@ LM_URL = f"http://{ServerIp}:{Port}/v1/chat/completions"
 MAX_TOTAL_BYTES = 100 * 1024 * 1024
 # Max count for tokens
 MAX_TOKENTS = 131000
+# Supported image formats
+IMAGE_EXTENSIONS = {'.jpg', '.jpeg', '.png', '.gif', '.bmp', '.webp'}
 
 def encode_file_to_b64(path):
     with open(path, "rb") as f:
         data = f.read()
     return base64.b64encode(data).decode("ascii"), len(data)
 
+def is_image_file(path):
+    _, ext = os.path.splitext(path.lower())
+    return ext in IMAGE_EXTENSIONS
+
+def get_mime_type(path):
+    _, ext = os.path.splitext(path.lower())
+    mime_map = {
+        '.jpg': 'image/jpeg',
+        '.jpeg': 'image/jpeg',
+        '.png': 'image/png',
+        '.gif': 'image/gif',
+        '.bmp': 'image/bmp',
+        '.webp': 'image/webp'
+    }
+    return mime_map.get(ext, 'application/octet-stream')
+
+
 def build_messages_with_files(user_message, file_paths):
-    messages = [{"role": "user", "content": user_message}]
+    messages = [{"role": "user", "content": []}]
     total_bytes = 0
+
+    # Add text part
+    if user_message:
+        messages[0]["content"].append({
+            "type": "text",
+            "text": user_message
+        })
 
     if not file_paths:
         return messages
@@ -28,25 +54,33 @@ def build_messages_with_files(user_message, file_paths):
     for path in file_paths:
         if not os.path.isfile(path):
             raise FileNotFoundError(f"File not found: {path}")
+
         b64, raw_len = encode_file_to_b64(path)
         total_bytes += len(b64)
         if total_bytes > MAX_TOTAL_BYTES:
             raise ValueError(f"Total encoded payload too large (> {MAX_TOTAL_BYTES} bytes). Reduce files or size.")
+
         fname = os.path.basename(path)
-        # The message format can be changed to meet the requirements of the server.
-        file_message = {
-            "role": "user",
-            "content": json.dumps({
-                "type": "file",
-                "filename": fname,
-                "encoding": "base64",
-                "size_bytes": raw_len,
-                "content_b64": b64
-            })
-        }
-        messages.append(file_message)
+
+        if is_image_file(path):
+            # For images, use the vision-compatible format
+            image_message = {
+                "type": "image_url",
+                "image_url": {
+                    "url": f"data:{get_mime_type(path)};base64,{b64}"
+                }
+            }
+            messages[0]["content"].append(image_message)
+        else:
+            # For non-image files, keep the original format or add as text
+            file_message = {
+                "type": "text",
+                "text": f"File: {fname}\nContent (base64): {b64[:100]}..."  # Show only first 100 chars
+            }
+            messages[0]["content"].append(file_message)
 
     return messages
+
 
 def ask_with_embedded_files(message, file_paths=None, temperature=0.7, max_tokens=4096, timeout=3600):
     try:
@@ -75,6 +109,7 @@ def ask_with_embedded_files(message, file_paths=None, temperature=0.7, max_token
         # If the structure is unexpected, return all the JSON for debugging.
         return json.dumps(j, ensure_ascii=False, indent=2)
 
+
 def main():
     print("Enter the message (Ctrl+C to exit):")
     try:
@@ -99,6 +134,7 @@ def main():
                 print(f"Unexpected error: {e}", file=sys.stderr)
     except KeyboardInterrupt:
         print("\nExit")
+
 
 if __name__ == "__main__":
     main()
