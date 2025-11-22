@@ -2,5 +2,5 @@ import os
 
 ServerIp = ""
 Port = 1234
-Model = "openai/gpt-oss-20b"
+Model = ""
 API_KEY = os.getenv("LM_API_KEY")

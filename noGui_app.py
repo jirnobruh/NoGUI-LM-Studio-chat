@@ -8,12 +8,37 @@ from config import ServerIp, Port, Model, API_KEY
 
 # URL address LM Studio
 LM_URL = f"http://{ServerIp}:{Port}/v1/chat/completions"
+MODELS_URL = f"http://{ServerIp}:{Port}/v1/models"
 # The maximum total size of base64 fields in bytes (for example, configure it for the server)
 MAX_TOTAL_BYTES = 100 * 1024 * 1024
 # Max count for tokens
 MAX_TOKENTS = 131000
 # Supported image formats
 IMAGE_EXTENSIONS = {'.jpg', '.jpeg', '.png', '.gif', '.bmp', '.webp'}
+
+def get_available_models():
+    # Get list of available models from LM Studio
+    headers = {}
+    if API_KEY:
+        headers["Authorization"] = f"Bearer {API_KEY}"
+
+    try:
+        resp = requests.get(MODELS_URL, headers=headers, timeout=10)
+        resp.raise_for_status()
+        models_data = resp.json()
+
+        models = []
+        for model in models_data.get("data", []):
+            model_info = {
+                "id": model.get("id"),
+                "name": model.get("id", "Unknown"),  # LM Studio использует id как название модели
+            }
+            models.append(model_info)
+
+        return models
+    except requests.RequestException as e:
+        print(f"Error fetching models: {e}", file=sys.stderr)
+        return []
 
 def encode_file_to_b64(path):
     with open(path, "rb") as f:
@@ -110,19 +135,47 @@ def ask_with_embedded_files(message, file_paths=None, temperature=0.7, max_token
         return json.dumps(j, ensure_ascii=False, indent=2)
 
 
+def print_models():
+    # Print available models
+    print("\nFetching available models...")
+    models = get_available_models()
+
+    if not models:
+        print("No models found or couldn't connect to LM Studio")
+        return
+
+    print(f"\nAvailable models ({len(models)}):")
+    for i, model in enumerate(models, 1):
+        print(f"{i}. {model['name']}")
+
+
 def main():
-    print("Enter the message (Ctrl+C to exit):")
+    print("LM Studio Chat Client")
+    print("Commands:")
+    print("  /models - Show available models")
+    print("  /exit   - Exit program")
+    print("  Ctrl+C  - Exit program")
+
     try:
         while True:
-            msg = input("> ").strip()
-            if not msg:
+            user_input = input("\n> ").strip()
+
+            if not user_input:
                 continue
 
+            # Handle commands
+            if user_input.lower() == '/models':
+                print_models()
+                continue
+            elif user_input.lower() == '/exit':
+                break
+
+            # Regular message
             file_input = input("Files (comma separated full paths, enter to skip): ").strip()
             paths = [p.strip() for p in file_input.split(",") if p.strip()] if file_input else None
 
             try:
-                reply = ask_with_embedded_files(msg, file_paths=paths, max_tokens=MAX_TOKENTS)
+                reply = ask_with_embedded_files(user_input, file_paths=paths, max_tokens=MAX_TOKENTS)
                 print(f"Assistant: {reply}")
             except FileNotFoundError as e:
                 print(f"Error: {e}", file=sys.stderr)
@@ -132,6 +185,7 @@ def main():
                 print(f"HTTP error: {e}", file=sys.stderr)
             except Exception as e:
                 print(f"Unexpected error: {e}", file=sys.stderr)
+
     except KeyboardInterrupt:
         print("\nExit")
 
