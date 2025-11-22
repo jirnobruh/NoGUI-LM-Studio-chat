@@ -4,7 +4,7 @@ import json
 import os
 import sys
 import requests
-from config import ServerIp, Port, Model, API_KEY
+from config import ServerIp, Port, API_KEY
 
 # URL address LM Studio
 LM_URL = f"http://{ServerIp}:{Port}/v1/chat/completions"
@@ -15,6 +15,8 @@ MAX_TOTAL_BYTES = 100 * 1024 * 1024
 MAX_TOKENTS = 131000
 # Supported image formats
 IMAGE_EXTENSIONS = {'.jpg', '.jpeg', '.png', '.gif', '.bmp', '.webp'}
+# A variable for storing models
+SELECTED_MODEL = None
 
 def get_available_models():
     # Get list of available models from LM Studio
@@ -31,7 +33,7 @@ def get_available_models():
         for model in models_data.get("data", []):
             model_info = {
                 "id": model.get("id"),
-                "name": model.get("id", "Unknown"),  # LM Studio использует id как название модели
+                "name": model.get("id", "Unknown"),
             }
             models.append(model_info)
 
@@ -39,6 +41,40 @@ def get_available_models():
     except requests.RequestException as e:
         print(f"Error fetching models: {e}", file=sys.stderr)
         return []
+
+
+def select_model():
+    """Allow user to select a model from available ones"""
+    print("Fetching available models...")
+    models = get_available_models()
+
+    if not models:
+        print("No models found or couldn't connect to LM Studio")
+        print("Please check if LM Studio is running and the server settings in config.py")
+        return None
+
+    print(f"\nAvailable models ({len(models)}):")
+    for i, model in enumerate(models, 1):
+        print(f"{i}. {model['name']}")
+
+    while True:
+        try:
+            choice = input(f"\nSelect model (1-{len(models)}): ").strip()
+            if not choice:
+                continue
+
+            choice_num = int(choice)
+            if 1 <= choice_num <= len(models):
+                selected = models[choice_num - 1]
+                print(f"Selected model: {selected['name']}")
+                return selected['id']
+            else:
+                print(f"Please enter a number between 1 and {len(models)}")
+        except ValueError:
+            print("Please enter a valid number")
+        except KeyboardInterrupt:
+            print("\nOperation cancelled")
+            return None
 
 def encode_file_to_b64(path):
     with open(path, "rb") as f:
@@ -108,13 +144,18 @@ def build_messages_with_files(user_message, file_paths):
 
 
 def ask_with_embedded_files(message, file_paths=None, temperature=0.7, max_tokens=4096, timeout=3600):
+    global SELECTED_MODEL
+
+    if not SELECTED_MODEL:
+        raise ValueError("No model selected. Please select a model first.")
+
     try:
         messages = build_messages_with_files(message, file_paths or [])
     except Exception as e:
         raise
 
     payload = {
-        "model": Model,
+        "model": SELECTED_MODEL,
         "messages": messages,
         "temperature": temperature,
         "max_tokens": max_tokens
@@ -135,6 +176,15 @@ def ask_with_embedded_files(message, file_paths=None, temperature=0.7, max_token
         return json.dumps(j, ensure_ascii=False, indent=2)
 
 
+def print_current_model():
+    """Print currently selected model"""
+    global SELECTED_MODEL
+    if SELECTED_MODEL:
+        print(f"Current model: {SELECTED_MODEL}")
+    else:
+        print("No model selected")
+
+
 def print_models():
     # Print available models
     print("\nFetching available models...")
@@ -150,11 +200,25 @@ def print_models():
 
 
 def main():
+    global SELECTED_MODEL
+
     print("LM Studio Chat Client")
+    print("=" * 50)
+
+    # Step 1: Select model
+    SELECTED_MODEL = select_model()
+    if not SELECTED_MODEL:
+        print("Failed to select model. Exiting.")
+        return
+
+    print("\n" + "=" * 50)
+    print("Chat session started!")
     print("Commands:")
-    print("  /models - Show available models")
+    print("  /models - Show available models and change")
+    print("  /model  - Show current model")
     print("  /exit   - Exit program")
     print("  Ctrl+C  - Exit program")
+    print("=" * 50)
 
     try:
         while True:
@@ -165,7 +229,13 @@ def main():
 
             # Handle commands
             if user_input.lower() == '/models':
-                print_models()
+                new_model = select_model()
+                if new_model:
+                    SELECTED_MODEL = new_model
+                    print(f"Model changed to: {SELECTED_MODEL}")
+                continue
+            elif user_input.lower() == '/model':
+                print_current_model()
                 continue
             elif user_input.lower() == '/exit':
                 break
